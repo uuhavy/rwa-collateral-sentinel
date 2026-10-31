@@ -3,6 +3,7 @@
 > **A Stateful RWA Solvency Oracle & Dynamic DeFi Lending Risk Engine on GenLayer**  
 > **Target Submission:** GenLayer Builder Program - "Intelligent Contracts" Track (0-300 Points Target)  
 > **Target Network:** GenLayer Studio (`studionet`) / Bradbury Testnet  
+> **Deployed Contract Address:** `0xBcC561671804813dEB790CA9b90C7d5D75b1a2aa`  
 > **Status:** Production-Ready | 100% Pure ASCII | Multi-Epoch Hysteresis & Circuit-Breaker Engine
 
 ---
@@ -15,15 +16,16 @@ Ready-to-copy metadata for the GenLayer Builder Portal submission form:
 - **Project Title:** RWACollateralSolvencySentinel: RWA Solvency Oracle & Dynamic DeFi Risk Engine
 - **Project Description (< 1,000 characters):**
   ```text
-  RWACollateralSolvencySentinel is an autonomous Real-World Asset (RWA) reserve solvency oracle and dynamic DeFi lending risk engine on GenLayer. Translating off-chain auditor attestations, custodian feeds, and contagion bulletins into on-chain LTV haircuts and circuit breakers requires non-deterministic reasoning beyond EVM logic.
+  RWACollateralSolvencySentinel is an on-chain Real-World Asset (RWA) reserve solvency oracle and dynamic DeFi lending risk engine on GenLayer. Translating auditor attestations, custodian feeds, and contagion bulletins into dynamic LTV haircuts and circuit breakers requires non-deterministic reasoning beyond EVM logic.
 
   Architecture:
-  - 3 storage models (AssetVaultProfile, AttestationEpoch, ContagionIncident) across 4 write methods with multi-epoch hysteresis (2 consecutive warning epochs auto-escalate THROTTLED_RISK to BORROW_PAUSED) and gradual PROBATION_RECOVERY unfreezing.
-  - 3 gl.vm.run_nondet_unsafe engines where validators enforce exact agreement on a 3-vector risk tuple (reserve_coverage_tier, liquidity_duration_tier, custodian_standing), deterministically binding current_ltv_bps, liquidation penalties, and borrow caps with zero economic divergence.
+  - 3 storage models (AssetVaultProfile, AttestationEpoch, ContagionIncident) across 4 write methods with multi-epoch hysteresis (2 consecutive warning epochs escalate THROTTLED_RISK to BORROW_PAUSED) and PROBATION_RECOVERY unfreezing.
+  - 3 gl.vm.run_nondet_unsafe engines where validators enforce exact agreement on a 3-vector risk tuple (reserve_coverage_tier, liquidity_duration_tier, custodian_standing), deterministically binding current_ltv_bps, penalties, and borrow caps with zero divergence.
 
-  Integration:
-  DeFi lending markets query compute_max_borrowable(vault_id, units) before issuing loans.
+  Deployment (studionet): 0xBcC561671804813dEB790CA9b90C7d5D75b1a2aa
+  Integration: Lending pools call compute_max_borrowable(vault_id, units).
   ```
+  *(Length: 972 characters - strictly under the 1,000 character limit)*
 - **Tags:** `intelligent-contracts`, `rwa`, `defi-risk`, `circuit-breaker`, `lending`, `solvency-oracle`, `hysteresis`, `genlayer`
 
 ---
@@ -32,7 +34,7 @@ Ready-to-copy metadata for the GenLayer Builder Portal submission form:
 
 DeFi money markets (such as Morpho Blue, Aave, and MakerDAO RWA vaults) hold billions in tokenized Treasury bills and custodial stablecoins (`USTB`, `OUSG`, `BUIDL`, `USDM`), yet EVM contracts are blind to off-chain reserve attestations, maturity drift, and custodian bank receivership until a catastrophic depeg has already drained lending pools.
 
-**RWACollateralSolvencySentinel** introduces a quantitative, multi-epoch DeFi risk stewardship architecture unlike bilateral dispute or governance voting contracts:
+**RWACollateralSolvencySentinel** introduces a quantitative, multi-epoch DeFi risk stewardship architecture:
 
 1. **Three-Table Relational Storage Schema:**
    - `AssetVaultProfile`: Tracks baseline vs. active LTV (`bps`), liquidation penalties (`bps`), borrow caps, `consecutive_warnings`, and `epoch_cursor`.
@@ -69,7 +71,48 @@ stateDiagram-v2
 
 ---
 
-## 4. Downstream DeFi Money Market Integration
+## 4. Deployment (studionet) & Worked Example
+
+- **Network:** `studionet`
+- **Contract Address:** `0xBcC561671804813dEB790CA9b90C7d5D75b1a2aa`
+- **Explorer URL:** https://explorer-studio.genlayer.com/address/0xBcC561671804813dEB790CA9b90C7d5D75b1a2aa
+- **Contract Source:** `contracts/rwa_collateral_sentinel.py`
+
+### Worked Example: Multi-Epoch RWA Vault Onboarding & Solvency Sync
+
+#### Step 1: Onboard RWA Collateral Vault (`onboard_collateral_vault`)
+```python
+contract.onboard_collateral_vault(
+    vault_id="USTB-VAULT-01",
+    asset_symbol="USTB",
+    issuer_entity="Superstate Short Duration Trust",
+    reserve_mandate="100% US Treasury Bills maturing within 90 days held at qualified custodian.",
+    base_ltv_bps=8000,
+    base_liq_penalty_bps=400,
+    max_borrow_cap=10000000
+)
+# Returns "USTB-VAULT-01" in circuit_state "NORMAL_OPERATION"
+```
+
+#### Step 2: Run Epoch Solvency Sync (`sync_epoch_solvency`)
+```python
+snapshot_key = contract.sync_epoch_solvency(
+    vault_id="USTB-VAULT-01",
+    attestation_url="https://attest.superstate.co/2026-10",
+    custodian_feed_url="https://custodian.umb.com/feeds/ustb"
+)
+# Expected illustrative consensus output when 1st minor reserve buffer dip (99.1%) occurs:
+# snapshot_key == "USTB-VAULT-01#E0001"
+# reserve_coverage_tier == "NARROW_BUFFER_98_TO_100"
+# circuit_state == "THROTTLED_RISK"
+# current_ltv_bps == 6000 (deterministic 25% haircut from 8000 bps)
+# active_borrow_cap == 5000000 (deterministic 50% throttle from 10,000,000)
+# compute_max_borrowable("USTB-VAULT-01", 1000000) == 600000
+```
+
+---
+
+## 5. Downstream DeFi Money Market Integration
 
 ```python
 from genlayer import *
@@ -88,7 +131,7 @@ class IsolatedRWALendingMarket(gl.Contract):
 
 ---
 
-## 5. Testing & Verification
+## 6. Testing & Verification
 
 ```bash
 gltest tests/test_rwa_collateral_sentinel.py -v -s
