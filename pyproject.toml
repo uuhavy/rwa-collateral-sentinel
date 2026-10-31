@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rwa-collateral-sentinel"
+version = "0.1.0"
+description = "Stateful RWA Reserve Solvency Sentinel and Dynamic DeFi Lending Risk Parameter Engine for GenLayer"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
